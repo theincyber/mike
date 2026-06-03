@@ -18,6 +18,7 @@ import {
     type UserApiKeys,
 } from "../lib/llm";
 import { getUserModelSettings } from "../lib/userSettings";
+import { lookupUsers } from "../lib/lookupUsers";
 import {
     checkProjectAccess,
     ensureReviewAccess,
@@ -408,20 +409,11 @@ tabularRouter.get("/:reviewId/people", requireAuth, async (req, res) => {
             : []
     ).map((e) => (e ?? "").toLowerCase());
 
-    // Same pattern as /projects/:id/people: walk auth.users to map emails
-    // to user_ids, then pull display_names from user_profiles by user_id.
-    const { data: usersData } = await db.auth.admin.listUsers({
-        perPage: 1000,
-    });
-    const allUsers = usersData?.users ?? [];
-    const userByEmail = new Map<string, { id: string; email: string }>();
-    const userById = new Map<string, { id: string; email: string }>();
-    for (const u of allUsers) {
-        if (!u.email) continue;
-        const lower = u.email.toLowerCase();
-        userByEmail.set(lower, { id: u.id, email: u.email });
-        userById.set(u.id, { id: u.id, email: u.email });
-    }
+    const { byEmail: userByEmail, byId: userById } = await lookupUsers(
+        [review.user_id as string],
+        sharedWith,
+        db,
+    );
 
     const memberUserIds: string[] = [];
     for (const email of sharedWith) {

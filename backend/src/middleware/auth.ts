@@ -32,6 +32,5 @@ export async function requireAuth(
 
   res.locals.userId = data.user.id;
   res.locals.userEmail = data.user.email?.toLowerCase() ?? "";
-  res.locals.token = token;
   next();
 }
