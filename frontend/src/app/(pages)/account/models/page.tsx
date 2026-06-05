@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useUserProfile } from "@/contexts/UserProfileContext";
 import type { ApiKeyState } from "@/app/lib/mikeApi";
-import { MODELS } from "@/app/components/assistant/ModelToggle";
+import { MODELS, ENABLED_PROVIDER_NAMES } from "@/app/components/assistant/ModelToggle";
 import {
     isModelAvailable,
     modelGroupToProvider,
@@ -38,6 +38,11 @@ const API_KEY_FIELDS = [
         placeholder: "sk-…",
     },
 ] as const;
+
+// Only show key fields for providers enabled via NEXT_PUBLIC_ENABLED_PROVIDERS.
+const VISIBLE_API_KEY_FIELDS = API_KEY_FIELDS.filter((f) =>
+    ENABLED_PROVIDER_NAMES.has(f.provider),
+);
 
 export default function ModelsAndApiKeysPage() {
     const { profile, updateModelPreference, updateApiKey } = useUserProfile();
@@ -91,7 +96,7 @@ export default function ModelsAndApiKeysPage() {
                     configured provider model.
                 </p>
                 <div className="space-y-4 max-w-xl">
-                    {API_KEY_FIELDS.map((field) => (
+                    {VISIBLE_API_KEY_FIELDS.map((field) => (
                         <ApiKeyField
                             key={field.provider}
                             label={field.label}

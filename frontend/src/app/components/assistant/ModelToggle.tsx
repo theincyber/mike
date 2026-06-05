@@ -19,7 +19,9 @@ export interface ModelOption {
     group: "Anthropic" | "Google" | "OpenAI";
 }
 
-export const MODELS: ModelOption[] = [
+// All model definitions — kept intact so providers can be re-enabled by
+// updating NEXT_PUBLIC_ENABLED_PROVIDERS without touching this file.
+const ALL_MODELS: ModelOption[] = [
     { id: "claude-opus-4-7", label: "Claude Opus 4.7", group: "Anthropic" },
     { id: "claude-sonnet-4-6", label: "Claude Sonnet 4.6", group: "Anthropic" },
     { id: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro", group: "Google" },
@@ -28,9 +30,61 @@ export const MODELS: ModelOption[] = [
     { id: "gpt-5.4-mini", label: "GPT-5.4 Mini", group: "OpenAI" },
 ];
 
-export const DEFAULT_MODEL_ID = "gemini-3-flash-preview";
+const PROVIDER_TO_GROUP: Record<string, ModelOption["group"]> = {
+    claude: "Anthropic",
+    gemini: "Google",
+    openai: "OpenAI",
+};
 
+// Preferred default model per provider (the mid-tier option for each).
+const PROVIDER_DEFAULTS: Record<string, string> = {
+    openai: "gpt-5.4-mini",
+    gemini: "gemini-3-flash-preview",
+    claude: "claude-sonnet-4-6",
+};
+
+// Resolve which model groups are active from the env var.
+// Set NEXT_PUBLIC_ENABLED_PROVIDERS=openai (comma-separated provider names)
+// to restrict the UI to specific providers. Unset = all providers shown.
+function buildEnabledGroups(): Set<ModelOption["group"]> {
+    const env = process.env.NEXT_PUBLIC_ENABLED_PROVIDERS?.trim();
+    if (!env) return new Set(Object.values(PROVIDER_TO_GROUP) as ModelOption["group"][]);
+    return new Set(
+        env
+            .split(",")
+            .map((p) => PROVIDER_TO_GROUP[p.trim().toLowerCase()])
+            .filter((g): g is ModelOption["group"] => !!g),
+    );
+}
+
+const ENABLED_GROUPS = buildEnabledGroups();
+
+// Active models — filtered by NEXT_PUBLIC_ENABLED_PROVIDERS.
+export const MODELS: ModelOption[] = ALL_MODELS.filter((m) =>
+    ENABLED_GROUPS.has(m.group),
+);
+
+// Default model: the preferred mid-tier model for the first enabled provider.
+function resolveDefaultModelId(): string {
+    const env = process.env.NEXT_PUBLIC_ENABLED_PROVIDERS?.trim();
+    if (!env) return "gemini-3-flash-preview"; // original default when all providers active
+    const firstProvider = env.split(",")[0]?.trim().toLowerCase();
+    return PROVIDER_DEFAULTS[firstProvider] ?? MODELS[0]?.id ?? "gpt-5.4-mini";
+}
+
+export const DEFAULT_MODEL_ID: string = resolveDefaultModelId();
 export const ALLOWED_MODEL_IDS = new Set(MODELS.map((m) => m.id));
+
+const GROUP_TO_PROVIDER: Record<ModelOption["group"], string> = {
+    Anthropic: "claude",
+    Google: "gemini",
+    OpenAI: "openai",
+};
+
+// Set of provider names (claude / gemini / openai) that are currently enabled.
+export const ENABLED_PROVIDER_NAMES: Set<string> = new Set(
+    MODELS.map((m) => GROUP_TO_PROVIDER[m.group]),
+);
 
 const GROUP_ORDER: ModelOption["group"][] = ["Anthropic", "Google", "OpenAI"];
 

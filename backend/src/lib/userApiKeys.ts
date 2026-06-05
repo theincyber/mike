@@ -36,12 +36,32 @@ export function hasEnvApiKey(provider: ApiKeyProvider): boolean {
     return !!envApiKey(provider);
 }
 
+// Cached so scrypt only runs once per process lifetime.
+let _encryptionKey: Buffer | undefined;
+
 function encryptionKey(): Buffer {
+    if (_encryptionKey) return _encryptionKey;
+
     const secret = process.env.USER_API_KEYS_ENCRYPTION_SECRET;
     if (!secret) {
         throw new Error("USER_API_KEYS_ENCRYPTION_SECRET is not configured");
     }
-    return crypto.createHash("sha256").update(secret).digest();
+
+    // USER_API_KEYS_KDF_SALT must be set to a stable random hex string and
+    // must never change after keys have been stored — changing it invalidates
+    // all existing encrypted API keys (users would need to re-enter them).
+    // Generate once with: openssl rand -hex 32
+    const saltHex = process.env.USER_API_KEYS_KDF_SALT;
+    if (!saltHex) {
+        throw new Error("USER_API_KEYS_KDF_SALT is not configured");
+    }
+    const salt = Buffer.from(saltHex, "hex");
+    if (salt.length < 16) {
+        throw new Error("USER_API_KEYS_KDF_SALT must be at least 16 bytes (32 hex chars)");
+    }
+
+    _encryptionKey = crypto.scryptSync(secret, salt, 32);
+    return _encryptionKey;
 }
 
 function encrypt(value: string): Omit<EncryptedKeyRow, "provider"> {

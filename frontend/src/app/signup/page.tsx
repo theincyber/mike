@@ -11,6 +11,10 @@ import { CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { updateUserProfile } from "@/app/lib/mikeApi";
 
+const SSO_TYPE = process.env.NEXT_PUBLIC_SSO_TYPE as "oauth" | "saml" | undefined;
+const SSO_LABEL = process.env.NEXT_PUBLIC_SSO_BUTTON_LABEL ?? "Sign in with SSO";
+const SSO_EXCLUSIVE = process.env.NEXT_PUBLIC_SSO_EXCLUSIVE === "true";
+
 export default function SignupPage() {
     const router = useRouter();
     const { isAuthenticated, authLoading } = useAuth();
@@ -22,12 +26,43 @@ export default function SignupPage() {
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [ssoLoading, setSsoLoading] = useState(false);
 
     useEffect(() => {
         if (!authLoading && isAuthenticated && !success) {
             router.replace("/assistant");
         }
     }, [authLoading, isAuthenticated, router, success]);
+
+    const handleSsoSignIn = async () => {
+        setSsoLoading(true);
+        setError(null);
+        try {
+            const redirectTo = `${window.location.origin}/auth/callback`;
+            if (SSO_TYPE === "saml") {
+                const providerId = process.env.NEXT_PUBLIC_SSO_SAML_PROVIDER_ID;
+                if (!providerId) throw new Error("SSO provider is not configured.");
+                const { data, error } = await supabase.auth.signInWithSSO({
+                    providerId,
+                    options: { redirectTo },
+                });
+                if (error) throw error;
+                if (data?.url) window.location.href = data.url;
+            } else {
+                const provider = process.env.NEXT_PUBLIC_SSO_OAUTH_PROVIDER;
+                if (!provider) throw new Error("SSO provider is not configured.");
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const { error } = await supabase.auth.signInWithOAuth({
+                    provider: provider as any,
+                    options: { redirectTo },
+                });
+                if (error) throw error;
+            }
+        } catch (err: unknown) {
+            setError(err instanceof Error ? err.message : "SSO sign in failed");
+            setSsoLoading(false);
+        }
+    };
 
     const handleSignup = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -137,6 +172,35 @@ export default function SignupPage() {
                         </div>
                     </div>
 
+                    {SSO_TYPE && (
+                        <>
+                            <p className="text-sm text-gray-500 mb-3">
+                                SSO users are provisioned automatically on first sign-in — no separate sign-up needed.
+                            </p>
+                            <Button
+                                type="button"
+                                onClick={handleSsoSignIn}
+                                disabled={ssoLoading}
+                                className="w-full bg-black hover:bg-gray-900 text-white"
+                            >
+                                {ssoLoading ? "Redirecting…" : SSO_LABEL}
+                            </Button>
+                            {!SSO_EXCLUSIVE && (
+                                <div className="relative my-6">
+                                    <div className="absolute inset-0 flex items-center">
+                                        <div className="w-full border-t border-gray-200" />
+                                    </div>
+                                    <div className="relative flex justify-center text-xs">
+                                        <span className="bg-white px-3 text-gray-400">
+                                            or sign up with email
+                                        </span>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    )}
+
+                    {(!SSO_TYPE || !SSO_EXCLUSIVE) && (
                     <form onSubmit={handleSignup} className="space-y-4">
                         <div>
                             <label
@@ -250,6 +314,7 @@ export default function SignupPage() {
                             {loading ? "Creating account..." : "Sign up"}
                         </Button>
                     </form>
+                    )}
 
                     {/* Terms and Privacy */}
                     <div className="mt-4 text-center text-xs text-gray-500">

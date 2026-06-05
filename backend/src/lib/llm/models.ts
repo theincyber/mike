@@ -53,3 +53,12 @@ export function resolveModel(id: string | null | undefined, fallback: string): s
     if (id && ALL_MODELS.has(id)) return id;
     return fallback;
 }
+
+// Returns false if ENABLED_PROVIDERS is set and does not include this provider.
+// When ENABLED_PROVIDERS is unset all providers are allowed.
+// Set ENABLED_PROVIDERS=openai (comma-separated) to restrict the backend.
+export function isProviderEnabled(provider: string): boolean {
+    const env = process.env.ENABLED_PROVIDERS?.trim();
+    if (!env) return true;
+    return env.split(",").map((p) => p.trim().toLowerCase()).includes(provider);
+}
