@@ -4,6 +4,10 @@ import {
     DEFAULT_TITLE_MODEL,
     DEFAULT_TABULAR_MODEL,
     OPENAI_LOW_MODELS,
+    OPENAI_MID_MODELS,
+    CLAUDE_MID_MODELS,
+    providerForModel,
+    isProviderEnabled,
     type UserApiKeys,
 } from "./llm";
 import { getUserApiKeys as getStoredUserApiKeys } from "./userApiKeys";
@@ -14,15 +18,23 @@ export type UserModelSettings = {
     api_keys: UserApiKeys;
 };
 
-// Title generation is a lightweight task — always routed to the cheapest model
-// of whichever provider the user has keys for: Gemini Flash Lite if Gemini is
-// available, otherwise OpenAI nano, otherwise Claude Haiku. With no user keys
-// set, defaults to Gemini (the dev-mode env fallback).
+// Returns the best low-tier model for title generation, skipping disabled providers.
 function resolveTitleModel(apiKeys: UserApiKeys): string {
-    if (apiKeys.gemini?.trim()) return DEFAULT_TITLE_MODEL;
-    if (apiKeys.openai?.trim()) return OPENAI_LOW_MODELS[0];
-    if (apiKeys.claude?.trim()) return "claude-haiku-4-5";
+    if (isProviderEnabled("gemini") && apiKeys.gemini?.trim()) return DEFAULT_TITLE_MODEL;
+    if (isProviderEnabled("openai") && apiKeys.openai?.trim()) return OPENAI_LOW_MODELS[0];
+    if (isProviderEnabled("claude") && apiKeys.claude?.trim()) return "claude-haiku-4-5";
+    // No key available for an enabled provider — return the cheapest enabled model.
+    if (isProviderEnabled("openai")) return OPENAI_LOW_MODELS[0];
+    if (isProviderEnabled("claude")) return "claude-haiku-4-5";
     return DEFAULT_TITLE_MODEL;
+}
+
+// Returns the default tabular model for the first enabled provider.
+function defaultTabularModel(): string {
+    if (isProviderEnabled("gemini")) return DEFAULT_TABULAR_MODEL;
+    if (isProviderEnabled("openai")) return OPENAI_MID_MODELS[0];
+    if (isProviderEnabled("claude")) return CLAUDE_MID_MODELS[0];
+    return DEFAULT_TABULAR_MODEL;
 }
 
 export async function getUserModelSettings(
@@ -37,9 +49,15 @@ export async function getUserModelSettings(
         .single();
     const api_keys = await getStoredUserApiKeys(userId, client);
 
+    const fallbackTabular = defaultTabularModel();
+    const resolvedTabular = resolveModel(data?.tabular_model, fallbackTabular);
+    const tabular_model = isProviderEnabled(providerForModel(resolvedTabular))
+        ? resolvedTabular
+        : fallbackTabular;
+
     return {
         title_model: resolveTitleModel(api_keys),
-        tabular_model: resolveModel(data?.tabular_model, DEFAULT_TABULAR_MODEL),
+        tabular_model,
         api_keys,
     };
 }
